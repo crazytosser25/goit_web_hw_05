@@ -13,38 +13,42 @@ from aiohttp import ClientSession
 
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format='%(name)s - %(asctime)s "%(levelname)s / %(message)s"',
     datefmt='[%d/%b/%Y %H:%M:%S]'
 )
 
-def processing_arguments() -> int:
+def processing_arguments(filtered_currencies, days = 1) -> int:
     """This function processes command line arguments.
 
     Returns:
-        int: Quantity of days
+        int: Quantity of days to show.
+        set: Set of currencies to show.
     """
-    try:
-        if len(sys.argv) > 2:
-            raise IndexError("Too many arguments.")
-        days = int(sys.argv[1]) if len(sys.argv) == 2 else 1
+    if len(sys.argv) >= 2:
+        args = sys.argv[1:]
+        days_flag = False
+        for arg in args:
+            logging.debug(arg)
+            if arg.isdigit():
+                if not days_flag:
+                    days = int(arg)
+                    days_flag = True
+                else:
+                    print('Too many digit arguments.')
+                    sys.exit()
+            else:
+                filtered_currencies.add(arg.upper())
 
-    except ValueError:
-        print("The argument must be an integer.")
-        sys.exit()
-    except IndexError as e:
-        print(e)
-        sys.exit()
-
-    return days
+    return days, filtered_currencies
 
 def format_data(row_data, filtered_currencies) -> dict:
     formatted_data = {}
     for i in row_data['exchangeRate']:
         if i['currency'] in filtered_currencies:
             formatted_data[i['currency']] = {
-                'sale': i.get('saleRate'),
-                'purchase': i.get('purchaseRate')
+                'sale': float(format(i.get('saleRate'), '.2f')),
+                'purchase': float(format(i.get('purchaseRate'), '.2f'))
             }
     return {row_data['date']: formatted_data}
 
@@ -62,9 +66,9 @@ async def request(day) -> list:
             return result
 
 async def main() -> list:
-    filtered_currencies = ['USD', 'EUR']
+    filtered_currencies: set = {'USD', 'EUR'}
     today = date.today()
-    days = processing_arguments()
+    days, filtered_currencies = processing_arguments(filtered_currencies)
 
     resulted_list = []
     for i in range(days):
