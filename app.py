@@ -13,7 +13,7 @@ from aiohttp import ClientSession
 
 
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format='%(name)s - %(asctime)s "%(levelname)s / %(message)s"',
     datefmt='[%d/%b/%Y %H:%M:%S]'
 )
@@ -33,7 +33,11 @@ def processing_arguments(filtered_currencies, days = 1) -> int:
             if arg.isdigit():
                 if not days_flag:
                     days = int(arg)
-                    days_flag = True
+                    if days <= 10:
+                        days_flag = True
+                    else:
+                        print('Only 10 days max allowed.')
+                        sys.exit()
                 else:
                     print('Too many digit arguments.')
                     sys.exit()
@@ -47,8 +51,16 @@ def format_data(row_data, filtered_currencies) -> dict:
     for i in row_data['exchangeRate']:
         if i['currency'] in filtered_currencies:
             formatted_data[i['currency']] = {
-                'sale': float(format(i.get('saleRate'), '.2f')),
-                'purchase': float(format(i.get('purchaseRate'), '.2f'))
+                'sale': round(
+                    float(
+                        i.get('saleRate') or i.get('saleRateNB')
+                    ), 2
+                ),
+                'purchase': round(
+                    float(
+                        i.get('purchaseRate') or i.get('purchaseRateNB')
+                    ), 2
+                )
             }
     return {row_data['date']: formatted_data}
 
@@ -70,10 +82,16 @@ async def main() -> list:
     today = date.today()
     days, filtered_currencies = processing_arguments(filtered_currencies)
 
-    resulted_list = []
+    tasks = []
     for i in range(days):
         needed_day = (today - timedelta(i)).strftime("%d.%m.%Y")
-        result = await request(needed_day)
+        tasks.append(request(needed_day))
+
+    results = await asyncio.gather(*tasks)
+
+    resulted_list = []
+
+    for result in results:
         logging.debug(result)
         formatted_result = format_data(result, filtered_currencies)
         resulted_list.append(formatted_result)
@@ -85,5 +103,7 @@ if __name__ == "__main__":
     if platform.system() == 'Windows':
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     currencies = asyncio.run(main())
-    print("Results of request to Privatbank:")
-    print(json.dumps(currencies, indent=2))
+    print(
+        "Results of request to Privatbank:\n",
+        json.dumps(currencies, indent=2)
+    )
